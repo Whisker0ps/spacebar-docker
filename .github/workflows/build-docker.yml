@@ -18,6 +18,8 @@ jobs:
       - name: Get latest Spacebar release
         id: upstream
         run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
           UPSTREAM_REPO="spacebarchat/server"
           TAG=$(curl -s https://api.github.com/repos/$UPSTREAM_REPO/releases/latest | jq -r .tag_name)
           echo "Latest upstream tag: $TAG"
