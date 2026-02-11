@@ -1,17 +1,16 @@
-# Use Node.js LTS
-FROM node:20-alpine
-
-# Install build dependencies for native Node modules
-RUN apk add --no-cache \
-    bash \
-    python3 \
-    make \
-    g++ \
-    git \
-    libc6-compat
+# Use Node.js LTS (Debian-based)
+FROM node:20-slim
 
 # Set working directory
 WORKDIR /app
+
+# Install build dependencies for native Node modules
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        python3 \
+        git \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy wrapper files (entrypoint, package.json if needed)
 COPY package*.json ./
