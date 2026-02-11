@@ -1,27 +1,41 @@
 #!/bin/bash
 set -e
 
-# 1. Fix Permissions on boot
-echo "Fixing permissions..."
-mkdir -p /data/postgres
-chown -R postgres:postgres /data
-chmod 700 /data/postgres
+# Define the data path clearly
+PGDATA="/data/postgres"
 
-# 2. Initialize DB if empty
-if [ -z "$(ls -A /data/postgres)" ]; then
-    echo "Initializing new database..."
-    su - postgres -c "/usr/lib/postgresql/15/bin/initdb -D /data/postgres"
+# 1. Fix Permissions on boot
+echo "Ensuring /data/postgres exists and has correct ownership..."
+mkdir -p "$PGDATA"
+
+# Only chown if necessary to save time/resources on large disks
+if [ "$(stat -c '%u:%g' "$PGDATA")" != "999:999" ]; then
+    chown -R postgres:postgres /data
 fi
 
-# 3. Remove stale lock files (Fixes the FATAL: lock file error)
-rm -f /data/postgres/postmaster.pid
+# Postgres is very picky; the data dir must be 700
+chmod 700 "$PGDATA"
+
+# 2. Initialize DB ONLY if empty
+# We check for the 'base' folder, which is a better indicator of an initialized DB
+if [ ! -d "$PGDATA/base" ]; then
+    echo "No existing database found. Initializing new database in $PGDATA..."
+    su - postgres -c "/usr/lib/postgresql/15/bin/initdb -D $PGDATA"
+else
+    echo "Found existing database in $PGDATA. Skipping initialization."
+fi
+
+# 3. Remove stale lock files
+# This is crucial for persistence! If the container crashed, this file 
+# prevents a restart.
+rm -f "$PGDATA/postmaster.pid"
 
 # 4. Background Seeder Logic
-# This waits for the main Postgres (started by Supervisor) to wake up
 (
     echo "Seeder: Waiting for Postgres to start..."
+    # We use -h /run/postgresql or -h localhost depending on your PG config
     until /usr/lib/postgresql/15/bin/pg_isready -h localhost -U postgres; do
-        sleep 1
+        sleep 2
     done
 
     echo "Seeder: Postgres is up. Ensuring DB/User exist..."
@@ -30,7 +44,7 @@ rm -f /data/postgres/postmaster.pid
     psql -h localhost -U postgres -d ${POSTGRES_DB} -c "ALTER SCHEMA public OWNER TO ${POSTGRES_USER};" || true
 
     echo "Seeder: Waiting for Spacebar to create tables..."
-    for i in {1..60}; do
+    for i in {1..30}; do
         if psql -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c "SELECT 1 FROM config LIMIT 1;" >/dev/null 2>&1; then
             echo "Seeder: Config table found! Injecting variables..."
             psql -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB} <<EOF
@@ -43,10 +57,10 @@ EOF
             echo "Seeder: Complete."
             break
         fi
-        sleep 2
+        sleep 3
     done
 ) &
 
-# 5. Start Supervisor (Which starts Postgres and Spacebar)
+# 5. Start Supervisor
 echo "Starting Supervisor..."
 exec "$@"
