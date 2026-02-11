@@ -1,10 +1,8 @@
-# Use full Node.js LTS image (Debian Bookworm)
 FROM node:20-bookworm
 
 WORKDIR /app
 
-# Install OS deps required for native Node modules (sqlite3)
-# Added pkg-config to help npm find the sqlite libraries
+# Install OS deps (Keep pkg-config, it's vital for SQLite)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       python3 \
@@ -15,20 +13,22 @@ RUN apt-get update && \
       libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy entrypoint
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x docker-entrypoint.sh
 
-# Copy Spacebar source (GitHub Actions populates this)
+# Copy Spacebar source
 COPY . .
 
-# Install dependencies and force sqlite3 to build from source using the system libs
-RUN npm install && npm install sqlite3 --build-from-source
+# 1. Install dependencies but DON'T run build scripts yet (prevents early sqlite failure)
+RUN npm install --ignore-scripts
 
-# Build Spacebar
+# 2. Force install and REBUILD sqlite3 specifically
+RUN npm install sqlite3 --build-from-source
+
+# 3. Now run the rest of the build scripts
 RUN npm run build
 
-# --- Your Variables ---
+# --- Your Variables (Preserved) ---
 ENV DB_TYPE=sqlite
 ENV PORT=3001
 ENV DB_PATH=/app/data/database.db
@@ -41,7 +41,6 @@ ENV API_ENDPOINT_PUBLIC=
 ENV CDN_ENDPOINT_PUBLIC=
 ENV GATEWAY_ENDPOINT_PUBLIC=
 
-# Ensure the data directory exists for the sqlite file
 RUN mkdir -p /app/data
 
 EXPOSE 3001
