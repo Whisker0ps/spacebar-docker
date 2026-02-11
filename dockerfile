@@ -1,11 +1,14 @@
-FROM node:20-bookworm
+# Switching to Node 22 (more compatible with current Spacebar/SQLite builds)
+FROM node:22-bookworm
 
 WORKDIR /app
 
-# Install OS deps (Keep pkg-config, it's vital for SQLite)
+# Install system deps + python-is-python3 (vital for node-gyp/sqlite3)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       python3 \
+      python3-pip \
+      python-is-python3 \
       make \
       g++ \
       git \
@@ -19,13 +22,14 @@ RUN chmod +x docker-entrypoint.sh
 # Copy Spacebar source
 COPY . .
 
-# 1. Install dependencies but DON'T run build scripts yet (prevents early sqlite failure)
+# 1. Clean out any pre-existing junk that might be in the cloned repo
+RUN rm -rf node_modules package-lock.json
+
+# 2. Force the install using the specific python path
 RUN npm install --ignore-scripts
+RUN npm install sqlite3 --build-from-source --python=/usr/bin/python3
 
-# 2. Force install and REBUILD sqlite3 specifically
-RUN npm install sqlite3 --build-from-source
-
-# 3. Now run the rest of the build scripts
+# 3. Build the app
 RUN npm run build
 
 # --- Your Variables (Preserved) ---
