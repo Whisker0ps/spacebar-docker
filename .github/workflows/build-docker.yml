@@ -1,7 +1,7 @@
 name: Build and Publish Spacebar Docker Image
 
 on:
-  workflow_dispatch:      # Manual trigger only
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,24 +12,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout your wrapper repo (contains Dockerfile and supervisord.conf)
       - name: Checkout wrapper repo
         uses: actions/checkout@v3
 
-      # 2️⃣ Pull latest Spacebar code WITHOUT overwriting your custom configs
       - name: Pull latest Spacebar code
         run: |
           git clone https://github.com/spacebarchat/server.git upstream
-          # Use rsync to merge files while protecting your Dockerfile and supervisord.conf
+          # Sync everything EXCEPT your config files to protect them
           rsync -av --exclude='Dockerfile' --exclude='supervisord.conf' upstream/ .
           rm -rf upstream
 
-      # 3️⃣ Patch package.json to point to the correct build output
       - name: Patch package.json start script
         run: |
           if [ -f package.json ]; then
-            echo "Modifying npm start to point to the bundled build output..."
-            # Spacebar builds to dist/bundle/start.js, not dist/index.js
+            # Spacebar builds to dist/bundle/start.js
             jq '.scripts.start = "node --enable-source-maps dist/bundle/start.js"' package.json > package.tmp.json
             mv package.tmp.json package.json
           else
@@ -37,7 +33,6 @@ jobs:
             exit 1
           fi
 
-      # 4️⃣ Log in to GHCR
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -45,11 +40,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 5️⃣ Set up Docker Buildx
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 6️⃣ Build and push
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
@@ -59,6 +52,3 @@ jobs:
           tags: ghcr.io/whisker0ps/spacebar:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Done
-        run: echo "Spacebar Docker image built and pushed successfully."
