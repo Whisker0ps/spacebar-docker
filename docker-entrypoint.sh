@@ -1,62 +1,26 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 
-# Database file (SQLite)
-DB_FILE="${DB_PATH:-/app/data/database.db}"
-mkdir -p "$(dirname "$DB_FILE")"
+# 1. Start Postgres in the background temporarily
+# We use -o to ignore external connections during setup
+/usr/lib/postgresql/15/bin/postgres -D /data/postgres > /dev/null 2>&1 &
+PID=$!
 
-# Helper function to update or insert endpoint (SQLite only)
-set_endpoint() {
-  KEY=$1
-  VALUE=$2
-  if [ -z "$VALUE" ]; then
-    return
-  fi
+# 2. Wait for Postgres to be ready
+echo "Waiting for Postgres to start..."
+until /usr/lib/postgresql/15/bin/pg_isready -h localhost; do
+  sleep 1
+done
 
-  if [ "$DB_TYPE" = "sqlite" ]; then
-    EXISTS=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='config';")
-    if [ "$EXISTS" -eq 1 ]; then
-      ROW=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM config WHERE key='$KEY';")
-      if [ "$ROW" -eq 0 ]; then
-        sqlite3 "$DB_FILE" "INSERT INTO config (key, value) VALUES ('$KEY', '\"$VALUE\"');"
-      else
-        sqlite3 "$DB_FILE" "UPDATE config SET value='\"$VALUE\"' WHERE key='$KEY';"
-      fi
-    fi
-  fi
-}
+# 3. Create the role and database if they don't exist
+echo "Initializing Spacebar role and database..."
+psql -h localhost -U postgres -c "CREATE ROLE ${POSTGRES_USER} WITH LOGIN PASSWORD '${POSTGRES_PASSWORD}';" || true
+psql -h localhost -U postgres -c "CREATE DATABASE ${POSTGRES_DB} OWNER ${POSTGRES_USER};" || true
 
-# Determine database backend
-if [ "$DB_TYPE" = "postgres" ]; then
-  if [ -z "$POSTGRES_HOST" ] || [ -z "$POSTGRES_DB" ] || [ -z "$POSTGRES_USER" ] || [ -z "$POSTGRES_PASSWORD" ]; then
-    echo "[ERROR] Postgres selected but required environment variables are missing."
-    echo "Set POSTGRES_HOST, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD"
-    exit 1
-  fi
-  echo "[Database] Using PostgreSQL at $POSTGRES_HOST:$POSTGRES_PORT/$POSTGRES_DB"
-  export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT:-5432}/${POSTGRES_DB}"
-else
-  echo "[Database] Using SQLite at $DB_FILE"
-  export DATABASE_URL="sqlite://$DB_FILE"
+# 4. Shut down the temporary background Postgres
+kill $PID
+wait $PID
 
-  # Initialize SQLite if not exists
-  if [ ! -f "$DB_FILE" ]; then
-    echo "Database not found. Initializing new Spacebar SQLite database..."
-    node -e "require('./dist/index.js')" &
-    PID=$!
-    sleep 5
-    kill $PID || true
-    echo "Database initialized."
-  fi
-fi
-
-# Set endpoints (SQLite only)
-set_endpoint "api_endpointPublic" "$API_ENDPOINT_PUBLIC"
-set_endpoint "cdn_endpointPublic" "$CDN_ENDPOINT_PUBLIC"
-set_endpoint "gateway_endpointPublic" "$GATEWAY_ENDPOINT_PUBLIC"
-
-# Override port if environment variable set
-export PORT="${PORT:-3001}"
-
-echo "Starting Spacebar server on port $PORT..."
+echo "Postgres is initialized. Starting Supervisor..."
+# 5. Start Supervisor (which will then start the permanent Postgres and Spacebar)
 exec "$@"

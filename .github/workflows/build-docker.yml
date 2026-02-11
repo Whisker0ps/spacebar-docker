@@ -1,7 +1,7 @@
 name: Build and Publish Spacebar Docker Image
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:      # Manual trigger only
 
 permissions:
   contents: read
@@ -12,19 +12,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1️⃣ Checkout your wrapper repo (where your Dockerfile & configs live)
       - name: Checkout wrapper repo
         uses: actions/checkout@v3
 
+      # 2️⃣ Pull latest Spacebar code without deleting your setup scripts
       - name: Pull latest Spacebar code
         run: |
           git clone https://github.com/spacebarchat/server.git upstream
-          # Sync everything EXCEPT your config files to protect them
-          rsync -av --exclude='Dockerfile' --exclude='supervisord.conf' upstream/ .
+          # Protect your custom Dockerfile, Supervisor config, and Entrypoint script
+          rsync -av --exclude='Dockerfile' \
+                    --exclude='supervisord.conf' \
+                    --exclude='docker-entrypoint.sh' \
+                    upstream/ .
           rm -rf upstream
 
+      # 3️⃣ Patch package.json to point to the correct build output
       - name: Patch package.json start script
         run: |
           if [ -f package.json ]; then
+            echo "Modifying npm start to point to the bundled build output..."
             # Spacebar builds to dist/bundle/start.js
             jq '.scripts.start = "node --enable-source-maps dist/bundle/start.js"' package.json > package.tmp.json
             mv package.tmp.json package.json
@@ -33,6 +40,7 @@ jobs:
             exit 1
           fi
 
+      # 4️⃣ Log in to GitHub Container Registry
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -40,9 +48,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # 5️⃣ Set up Docker Buildx for optimized building
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
+      # 6️⃣ Build and push Docker image
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
@@ -52,3 +62,7 @@ jobs:
           tags: ghcr.io/whisker0ps/spacebar:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # 7️⃣ Done
+      - name: Done
+        run: echo "Spacebar Docker image built and pushed successfully."
