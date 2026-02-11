@@ -1,0 +1,49 @@
+name: Build Spacebar Docker Image
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # daily at midnight UTC
+  workflow_dispatch:      # manual trigger
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout wrapper repo
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      # Fetch latest upstream release
+      - name: Get latest Spacebar release
+        id: upstream
+        run: |
+          UPSTREAM_REPO="spacebarchat/server"
+          TAG=$(curl -s https://api.github.com/repos/$UPSTREAM_REPO/releases/latest | jq -r .tag_name)
+          echo "Latest upstream tag: $TAG"
+          echo "TAG=$TAG" >> $GITHUB_ENV
+
+      # Clone upstream release
+      - name: Download upstream source
+        run: |
+          git clone --branch ${{ env.TAG }} https://github.com/spacebarchat/server.git upstream
+          cp -r upstream/* ./
+
+      # Login to GHCR (no personal token needed)
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build and push Docker image
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/spacebar:${{ env.TAG }}
+
+      - name: Done
+        run: echo "Docker image built and pushed for tag ${{ env.TAG }}"
