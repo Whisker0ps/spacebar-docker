@@ -22,6 +22,7 @@ RUN chmod +x entry.sh
 
 # Default environment variables
 ENV DB_TYPE=sqlite
+ENV PORT=3001
 ENV DB_PATH=/app/data/database.db
 ENV POSTGRES_HOST=
 ENV POSTGRES_PORT=5432
