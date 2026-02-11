@@ -4,19 +4,18 @@ FROM node:20
 # Set working directory
 WORKDIR /app
 
-# Install git (needed to clone upstream in GitHub Actions)
+# Install git (needed if you want to clone upstream in GitHub Actions)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends git && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy wrapper files (entrypoint and optionally package.json if you need them)
+# Copy wrapper entrypoint only
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
-COPY package*.json ./  # optional if you have a wrapper package.json
 
 # Make entrypoint executable
 RUN chmod +x docker-entrypoint.sh
 
-# Copy the rest of the app (GitHub Actions will populate this)
+# Copy the rest of the app (GitHub Actions will populate this before build)
 COPY . .
 
 # Install all Node dependencies (including devDependencies needed for build)
@@ -38,7 +37,7 @@ ENV API_ENDPOINT_PUBLIC=
 ENV CDN_ENDPOINT_PUBLIC=
 ENV GATEWAY_ENDPOINT_PUBLIC=
 
-# Expose the port
+# Expose default port (user can override in Unraid GUI)
 EXPOSE 3001
 
 # Entrypoint
