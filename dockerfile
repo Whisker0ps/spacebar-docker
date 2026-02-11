@@ -6,7 +6,7 @@ WORKDIR /app
 
 # Copy wrapper files (entrypoint, package.json if needed)
 COPY package*.json ./
-COPY entry.sh ./entry.sh
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
 
 # Install dependencies
 RUN npm install --production
@@ -18,7 +18,7 @@ COPY . .
 RUN npm run build
 
 # Make entrypoint executable
-RUN chmod +x entry.sh
+RUN chmod +x docker-entrypoint.sh
 
 # Default environment variables
 ENV DB_TYPE=sqlite
@@ -37,7 +37,7 @@ ENV GATEWAY_ENDPOINT_PUBLIC=
 EXPOSE 3001
 
 # Entrypoint
-ENTRYPOINT ["./entry.sh"]
+ENTRYPOINT ["./docker-entrypoint.sh"]
 
 # Default command
 CMD ["npm", "run", "start"]
