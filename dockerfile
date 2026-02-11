@@ -1,46 +1,34 @@
-#!/bin/sh
-set -e
+# Stage 1: Build
+FROM node:20-alpine AS build
 
-DB_FILE="/app/database.db"
+WORKDIR /app
+RUN apk add --no-cache git
 
-# Helper function to update or insert endpoint
-set_endpoint() {
-  KEY=$1
-  VALUE=$2
-  if [ -z "$VALUE" ]; then
-    return
-  fi
+# Clone upstream repo and build
+RUN git clone https://github.com/spacebarchat/server.git .
+RUN npm install
+RUN npm run build
 
-  # If key exists, update it; if not, insert it
-  EXISTS=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='config';")
-  if [ "$EXISTS" -eq 1 ]; then
-    ROW=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM config WHERE key='$KEY';")
-    if [ "$ROW" -eq 0 ]; then
-      sqlite3 "$DB_FILE" "INSERT INTO config (key, value) VALUES ('$KEY', '\"$VALUE\"');"
-    else
-      sqlite3 "$DB_FILE" "UPDATE config SET value='\"$VALUE\"' WHERE key='$KEY';"
-    fi
-  fi
-}
+# Stage 2: Run
+FROM node:20-alpine
 
-if [ ! -f "$DB_FILE" ]; then
-  echo "Database not found. Initializing new Spacebar database..."
-  
-  # Let Spacebar create database by starting it briefly
-  npm run build # ensure everything is built
-  node -e "require('./dist/index.js')" &
-  PID=$!
-  
-  # Give Spacebar a few seconds to initialize database
-  sleep 5
-  kill $PID || true
-  echo "Database initialized."
-fi
+WORKDIR /app
+RUN apk add --no-cache sqlite sqlite-dev
 
-# Update endpoints if ENV variables are set
-set_endpoint "api_endpointPublic" "$API_ENDPOINT_PUBLIC"
-set_endpoint "cdn_endpointPublic" "$CDN_ENDPOINT_PUBLIC"
-set_endpoint "gateway_endpointPublic" "$GATEWAY_ENDPOINT_PUBLIC"
+# Copy built app from build stage
+COPY --from=build /app /app
 
-echo "Starting Spacebar server..."
-exec "$@"
+EXPOSE 3001
+
+# Optional environment variables for endpoints
+ENV API_ENDPOINT_PUBLIC=""
+ENV CDN_ENDPOINT_PUBLIC=""
+ENV GATEWAY_ENDPOINT_PUBLIC=""
+
+# Copy the entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Use entrypoint
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["npm", "run", "start"]
