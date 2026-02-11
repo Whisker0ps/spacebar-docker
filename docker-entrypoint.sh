@@ -17,14 +17,17 @@ echo "Ensuring role and database exist..."
 psql -h localhost -U postgres -c "CREATE ROLE ${POSTGRES_USER} WITH LOGIN PASSWORD '${POSTGRES_PASSWORD}';" || true
 psql -h localhost -U postgres -c "CREATE DATABASE ${POSTGRES_DB} OWNER ${POSTGRES_USER};" || true
 
-# 4. INSERT the config values directly into the table
-# We use 'ON CONFLICT' or 'INSERT' logic to make sure we don't crash if they exist
-echo "Seeding database config from environment variables..."
+# 4. Seeding and Fixing Permissions
+echo "Seeding database config and setting ownership..."
 psql -h localhost -U postgres -d ${POSTGRES_DB} <<EOF
--- Ensure the config table exists (Spacebar usually creates this, but we'll be safe)
+-- Ensure the config table exists
 CREATE TABLE IF NOT EXISTS config (key text PRIMARY KEY, value text);
 
--- Insert or Update the critical endpoints
+-- Fix ownership so the app user can actually use it
+ALTER TABLE config OWNER TO ${POSTGRES_USER};
+GRANT ALL PRIVILEGES ON TABLE config TO ${POSTGRES_USER};
+
+-- Insert or Update the critical endpoints (JSON format)
 INSERT INTO config (key, value) VALUES ('api_endpointPublic', '"${API_ENDPOINT_PUBLIC}"') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 INSERT INTO config (key, value) VALUES ('gateway_endpointPublic', '"${GATEWAY_ENDPOINT_PUBLIC}"') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 INSERT INTO config (key, value) VALUES ('cdn_endpointPublic', '"${CDN_ENDPOINT_PUBLIC}"') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
@@ -34,5 +37,5 @@ EOF
 kill $PID 2>/dev/null || true
 wait $PID 2>/dev/null || true
 
-echo "Database seeded. Handing over to Supervisor..."
+echo "Database seeded and permissions fixed. Handing over to Supervisor..."
 exec "$@"
