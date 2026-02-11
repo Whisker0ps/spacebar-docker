@@ -1,32 +1,29 @@
-# Use Node.js LTS (Debian-based)
-FROM node:20-slim
+# Use full Node.js LTS image (Debian-based) to avoid Alpine build issues
+FROM node:20
 
 # Set working directory
 WORKDIR /app
 
-# Install build dependencies for native Node modules
+# Install git (needed to clone upstream in GitHub Actions)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        build-essential \
-        python3 \
-        git \
-    && rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copy wrapper files (entrypoint, package.json if needed)
-COPY package*.json ./
+# Copy wrapper files (entrypoint and optionally package.json if you need them)
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
-
-# Install Node dependencies
-RUN npm install --production
-
-# Copy the rest of the app (we'll pull latest in GitHub Actions)
-COPY . .
-
-# Build Spacebar
-RUN npm run build
+COPY package*.json ./  # optional if you have a wrapper package.json
 
 # Make entrypoint executable
 RUN chmod +x docker-entrypoint.sh
+
+# Copy the rest of the app (GitHub Actions will populate this)
+COPY . .
+
+# Install all Node dependencies (including devDependencies needed for build)
+RUN npm install
+
+# Build Spacebar (schemas, OpenAPI, etc.)
+RUN npm run build
 
 # Default environment variables
 ENV DB_TYPE=sqlite
@@ -41,7 +38,7 @@ ENV API_ENDPOINT_PUBLIC=
 ENV CDN_ENDPOINT_PUBLIC=
 ENV GATEWAY_ENDPOINT_PUBLIC=
 
-# Expose default Spacebar port
+# Expose the port
 EXPOSE 3001
 
 # Entrypoint

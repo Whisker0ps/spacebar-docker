@@ -42,7 +42,6 @@ else
   # Initialize SQLite if not exists
   if [ ! -f "$DB_FILE" ]; then
     echo "Database not found. Initializing new Spacebar SQLite database..."
-    npm run build
     node -e "require('./dist/index.js')" &
     PID=$!
     sleep 5
@@ -56,5 +55,8 @@ set_endpoint "api_endpointPublic" "$API_ENDPOINT_PUBLIC"
 set_endpoint "cdn_endpointPublic" "$CDN_ENDPOINT_PUBLIC"
 set_endpoint "gateway_endpointPublic" "$GATEWAY_ENDPOINT_PUBLIC"
 
-echo "Starting Spacebar server..."
+# Override port if environment variable set
+export PORT="${PORT:-3001}"
+
+echo "Starting Spacebar server on port $PORT..."
 exec "$@"
