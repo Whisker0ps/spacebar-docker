@@ -1,8 +1,14 @@
 # Use Node.js LTS
 FROM node:20-alpine
 
-# Install build dependencies for native Node modules (e.g., sqlite3)
-RUN apk add --no-cache python3 make g++ bash
+# Install build dependencies for native Node modules
+RUN apk add --no-cache \
+    bash \
+    python3 \
+    make \
+    g++ \
+    git \
+    libc6-compat
 
 # Set working directory
 WORKDIR /app
@@ -11,7 +17,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 
-# Install dependencies
+# Install Node dependencies
 RUN npm install --production
 
 # Copy the rest of the app (we'll pull latest in GitHub Actions)
