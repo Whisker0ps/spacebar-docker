@@ -1,9 +1,8 @@
-# Use full Node.js LTS image (Debian-based)
 FROM node:20
 
 WORKDIR /app
 
-# Install OS deps required for native Node modules (sqlite3)
+# Native build deps for sqlite3
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       python3 \
@@ -13,18 +12,16 @@ RUN apt-get update && \
       libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy entrypoint
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x docker-entrypoint.sh
 
-# Copy Spacebar source (GitHub Actions populates this)
 COPY . .
 
-# Install Spacebar dependencies
+# Install Spacebar deps
 RUN npm install
 
-# Install sqlite3 explicitly for fallback SQLite support
-RUN npm install sqlite3
+# 🔑 Force sqlite3 to build from source (Node 20 fix)
+RUN npm install sqlite3 --build-from-source
 
 # Build Spacebar
 RUN npm run build
