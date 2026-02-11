@@ -1,30 +1,35 @@
-# Use full Node.js LTS image (Debian-based) to avoid Alpine build issues
+# Use full Node.js LTS image (Debian-based)
 FROM node:20
 
 # Set working directory
 WORKDIR /app
 
-# Install git (needed if you want to clone upstream in GitHub Actions)
+# Install OS deps needed for native modules like sqlite3
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends git && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends \
+      python3 \
+      make \
+      g++ \
+      git \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy wrapper entrypoint only
+# Copy entrypoint
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
-
-# Make entrypoint executable
 RUN chmod +x docker-entrypoint.sh
 
-# Copy the rest of the app (GitHub Actions will populate this before build)
+# Copy Spacebar source (GitHub Actions populates this)
 COPY . .
 
-# Install all Node dependencies (including devDependencies needed for build)
+# Install Spacebar dependencies
 RUN npm install
 
-# Build Spacebar (schemas, OpenAPI, etc.)
+# ✅ Explicitly install sqlite3 for fallback SQLite support
+RUN npm install sqlite3
+
+# Build Spacebar (schema, OpenAPI, etc.)
 RUN npm run build
 
-# Default environment variables
+# Defaults (Unraid can override)
 ENV DB_TYPE=sqlite
 ENV PORT=3001
 ENV DB_PATH=/app/data/database.db
@@ -37,11 +42,8 @@ ENV API_ENDPOINT_PUBLIC=
 ENV CDN_ENDPOINT_PUBLIC=
 ENV GATEWAY_ENDPOINT_PUBLIC=
 
-# Expose default port (user can override in Unraid GUI)
+# Default exposed port (documentation only)
 EXPOSE 3001
 
-# Entrypoint
 ENTRYPOINT ["./docker-entrypoint.sh"]
-
-# Default command
 CMD ["npm", "run", "start"]
